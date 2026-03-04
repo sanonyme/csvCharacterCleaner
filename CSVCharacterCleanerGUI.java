@@ -1,11 +1,13 @@
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -19,9 +21,13 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
     private JTextArea logArea;
     private JLabel statusLabel;
     private JLabel fileCountLabel;
+    private JLabel outputFolderLabel;
+    private JCheckBox addCleanedCheckbox;
+    private JTextField prefixToRemoveField;
     private CSVCharacterCleaner cleaner;
     private boolean isProcessing = false;
     private int filesProcessed = 0;
+    private File outputFolder;
     
     // Ultra-modern color scheme
     private static final Color PRIMARY_COLOR = new Color(59, 130, 246);      // Modern blue
@@ -34,6 +40,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
     
     public CSVCharacterCleanerGUI() {
         cleaner = new CSVCharacterCleaner();
+        outputFolder = new File(System.getProperty("user.home") + File.separator + "Desktop");
         initializeGUI();
     }
     
@@ -50,6 +57,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         
         // Create main components
         add(createHeaderPanel(), BorderLayout.NORTH);
+        add(createToolbarPanel(), BorderLayout.PAGE_START);
         add(createMainDropZone(), BorderLayout.CENTER);
         add(createLogPanel(), BorderLayout.SOUTH);
         
@@ -92,6 +100,101 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         
         headerPanel.add(titlePanel, BorderLayout.CENTER);
         return headerPanel;
+    }
+    
+    private JPanel createToolbarPanel() {
+        JPanel toolbar = new JPanel(new BorderLayout(0, 8));
+        toolbar.setBackground(BACKGROUND_COLOR);
+        toolbar.setBorder(new EmptyBorder(0, 20, 8, 20));
+        
+        // Top row: buttons and output folder
+        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        topRow.setBackground(BACKGROUND_COLOR);
+        
+        JButton browseBtn = new JButton("Browse Files...");
+        browseBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        browseBtn.setBackground(PRIMARY_COLOR);
+        browseBtn.setForeground(Color.WHITE);
+        browseBtn.setFocusPainted(false);
+        browseBtn.setBorderPainted(false);
+        browseBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        browseBtn.addActionListener(e -> browseForFiles());
+        
+        JButton outputBtn = new JButton("Choose Output Folder...");
+        outputBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        outputBtn.setBackground(ACCENT_COLOR);
+        outputBtn.setForeground(Color.WHITE);
+        outputBtn.setFocusPainted(false);
+        outputBtn.setBorderPainted(false);
+        outputBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        outputBtn.addActionListener(e -> chooseOutputFolder());
+        
+        outputFolderLabel = new JLabel("Output: " + outputFolder.getAbsolutePath());
+        outputFolderLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        outputFolderLabel.setForeground(TEXT_SECONDARY);
+        outputFolderLabel.setToolTipText(outputFolder.getAbsolutePath());
+        
+        topRow.add(browseBtn);
+        topRow.add(outputBtn);
+        topRow.add(outputFolderLabel);
+        
+        // Options row: add _cleaned checkbox and prefix removal
+        JPanel optionsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        optionsRow.setBackground(BACKGROUND_COLOR);
+        
+        addCleanedCheckbox = new JCheckBox("Add \"_cleaned\" to output filenames", true);
+        addCleanedCheckbox.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        addCleanedCheckbox.setBackground(BACKGROUND_COLOR);
+        
+        optionsRow.add(addCleanedCheckbox);
+        optionsRow.add(new JLabel("  Remove prefix:"));
+        prefixToRemoveField = new JTextField(12);
+        prefixToRemoveField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        prefixToRemoveField.setToolTipText("e.g. _IN_ - removes this prefix from output filenames");
+        prefixToRemoveField.setColumns(12);
+        optionsRow.add(prefixToRemoveField);
+        
+        toolbar.add(topRow, BorderLayout.NORTH);
+        toolbar.add(optionsRow, BorderLayout.CENTER);
+        return toolbar;
+    }
+    
+    private void browseForFiles() {
+        if (isProcessing) return;
+        
+        JFileChooser chooser = new JFileChooser();
+        chooser.setMultiSelectionEnabled(true);
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        chooser.setDialogTitle("Select CSV files to clean");
+        
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File[] selectedFiles = chooser.getSelectedFiles();
+            if (selectedFiles.length > 0) {
+                List<File> csvFiles = new ArrayList<>();
+                for (File f : selectedFiles) {
+                    if (f.getName().toLowerCase().endsWith(".csv")) {
+                        csvFiles.add(f);
+                    }
+                }
+                if (!csvFiles.isEmpty()) {
+                    processCSVFiles(csvFiles);
+                } else {
+                    showError("No CSV files selected. Please select .csv files.");
+                }
+            }
+        }
+    }
+    
+    private void chooseOutputFolder() {
+        JFileChooser chooser = new JFileChooser(outputFolder);
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Choose output folder for cleaned files");
+        
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            outputFolder = chooser.getSelectedFile();
+            outputFolderLabel.setText("Output: " + outputFolder.getAbsolutePath());
+            outputFolderLabel.setToolTipText(outputFolder.getAbsolutePath());
+        }
     }
     
     private JPanel createMainDropZone() {
@@ -155,7 +258,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         gbc.insets = new Insets(0, 0, 5, 0);
         
         // Description
-        JLabel descLabel = new JLabel("Files will be automatically cleaned and saved to your Desktop");
+        JLabel descLabel = new JLabel("Files will be cleaned and saved to your chosen output folder");
         descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         descLabel.setForeground(TEXT_SECONDARY);
         dropContent.add(descLabel, gbc);
@@ -215,7 +318,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         logArea.setForeground(new Color(51, 65, 85));
         logArea.setMargin(new Insets(15, 15, 15, 15));
         logArea.setLineWrap(false);
-        logArea.setText("Ready to process CSV files. Drop files above to begin.\n");
+        logArea.setText("Ready to process CSV files. Drop files or click 'Browse Files' to select multiple files.\n");
         
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -241,7 +344,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         if (!isProcessing && dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
             dtde.acceptDrag(DnDConstants.ACTION_COPY);
             dropZone.setBackground(new Color(220, 252, 231)); // Modern light green
-            statusLabel.setText("Drop CSV file to process...");
+            statusLabel.setText("Drop CSV files to process...");
         } else {
             dtde.rejectDrag();
         }
@@ -278,15 +381,16 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
                 @SuppressWarnings("unchecked")
                 List<File> droppedFiles = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
                 
-                // Process only CSV files
+                List<File> csvFiles = new ArrayList<>();
                 for (File file : droppedFiles) {
                     if (file.getName().toLowerCase().endsWith(".csv")) {
-                        processCSVFile(file);
-                        break; // Process one at a time for now
+                        csvFiles.add(file);
                     }
                 }
                 
-                if (droppedFiles.stream().noneMatch(f -> f.getName().toLowerCase().endsWith(".csv"))) {
+                if (!csvFiles.isEmpty()) {
+                    processCSVFiles(csvFiles);
+                } else {
                     showError("No CSV files found. Please drop CSV files only.");
                 }
                 
@@ -300,61 +404,61 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         }
     }
     
-    private void processCSVFile(File inputFile) {
-        if (isProcessing) return;
+    private void processCSVFiles(List<File> inputFiles) {
+        if (isProcessing || inputFiles.isEmpty()) return;
         
         isProcessing = true;
         progressBar.setVisible(true);
         progressBar.setIndeterminate(true);
-        progressBar.setString("Processing " + inputFile.getName() + "...");
+        progressBar.setString("Processing " + inputFiles.size() + " file(s)...");
         
-        // Generate output path to Desktop
-        String desktopPath = System.getProperty("user.home") + File.separator + "Desktop";
-        String fileName = inputFile.getName();
-        int dotIndex = fileName.lastIndexOf('.');
-        String baseName = fileName.substring(0, dotIndex);
-        String extension = fileName.substring(dotIndex);
-        String outputPath = desktopPath + File.separator + baseName + "_cleaned" + extension;
+        int totalFiles = inputFiles.size();
+        final boolean addCleaned = addCleanedCheckbox.isSelected();
+        final String prefixToRemove = prefixToRemoveField.getText().trim();
         
-        // Process in background thread
-        SwingWorker<Boolean, String> worker = new SwingWorker<Boolean, String>() {
+        SwingWorker<Integer, String> worker = new SwingWorker<Integer, String>() {
             @Override
-            protected Boolean doInBackground() throws Exception {
-                publish("🔄 Processing: " + inputFile.getName());
-                publish("📁 Output: " + new File(outputPath).getName() + " (Desktop)");
-                
-                try {
-                    long lineCount = getLineCount(inputFile.getAbsolutePath());
-                    publish("📊 Starting processing of " + lineCount + " lines...");
-                    
-                    // Process the file
-                    cleaner.cleanCSVFile(inputFile.getAbsolutePath(), outputPath);
-                    
-                    publish("✅ Processing completed successfully!");
-                    publish("📊 Total lines processed: " + lineCount);
-                    
-                    // Check if the file had problems that were fixed
-                    String fileName = inputFile.getName().toLowerCase();
-                    boolean hadQuoteIssues = fileName.contains("airbrush") || checkForQuoteIssues(inputFile);
-                    
-                    publish("🔧 Character fixes applied:");
-                    if (hadQuoteIssues) {
-                        publish("   • Fixed double quotes (3\" → 3 inch)");
-                        publish("   • Resolved CSV import errors");
-                    }
-                    publish("   • Converted special characters (á → a, € → EUR)");
-                    publish("   • Normalized accented characters");
-                    publish("   • Made CSV safe for import systems");
-                    
-                    publish("💾 Output saved to Desktop: " + new File(outputPath).getName());
-                    publish("🎉 Your file is now ready for error-free importing!");
-                    publish(""); // Empty line for spacing
-                    
-                    return true;
-                } catch (IOException e) {
-                    publish("❌ Error: " + e.getMessage());
-                    throw e;
+            protected Integer doInBackground() throws Exception {
+                if (!outputFolder.exists()) {
+                    outputFolder.mkdirs();
                 }
+                
+                int successCount = 0;
+                for (int i = 0; i < inputFiles.size(); i++) {
+                    File inputFile = inputFiles.get(i);
+                    String fileName = inputFile.getName();
+                    int dotIndex = fileName.lastIndexOf('.');
+                    String baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+                    String extension = dotIndex > 0 ? fileName.substring(dotIndex) : ".csv";
+                    
+                    // Remove prefix from base name if specified
+                    if (!prefixToRemove.isEmpty() && baseName.startsWith(prefixToRemove)) {
+                        baseName = baseName.substring(prefixToRemove.length());
+                    }
+                    
+                    // Add _cleaned suffix if option is enabled
+                    String outputFileName = addCleaned ? baseName + "_cleaned" + extension : baseName + extension;
+                    String outputPath = outputFolder.getAbsolutePath() + File.separator + outputFileName;
+                    
+                    publish("🔄 [" + (i + 1) + "/" + totalFiles + "] Processing: " + inputFile.getName());
+                    publish("📁 Output: " + new File(outputPath).getName());
+                    
+                    try {
+                        long lineCount = getLineCount(inputFile.getAbsolutePath());
+                        publish("📊 Starting processing of " + lineCount + " lines...");
+                        
+                        cleaner.cleanCSVFile(inputFile.getAbsolutePath(), outputPath);
+                        
+                        publish("✅ Completed: " + inputFile.getName());
+                        publish("💾 Saved to: " + outputPath);
+                        publish(""); // Empty line for spacing
+                        successCount++;
+                    } catch (IOException e) {
+                        publish("❌ Error processing " + inputFile.getName() + ": " + e.getMessage());
+                        publish("");
+                    }
+                }
+                return successCount;
             }
             
             @Override
@@ -368,21 +472,21 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
             @Override
             protected void done() {
                 try {
-                    if (get()) {
-                        filesProcessed++;
-                        fileCountLabel.setText("Files processed: " + filesProcessed);
-                        statusLabel.setText("File processed successfully!");
-                        showSuccess(new File(outputPath).getName());
+                    int successCount = get();
+                    filesProcessed += successCount;
+                    fileCountLabel.setText("Files processed: " + filesProcessed);
+                    statusLabel.setText(successCount + " of " + totalFiles + " file(s) processed successfully!");
+                    if (successCount > 0) {
+                        showSuccess(successCount, totalFiles);
                     }
                 } catch (Exception e) {
-                    statusLabel.setText("Error processing file");
+                    statusLabel.setText("Error processing files");
                     showError("Error: " + e.getMessage());
                 } finally {
                     isProcessing = false;
                     progressBar.setVisible(false);
                     
-                    // Reset status after delay
-                    Timer resetTimer = new Timer(3000, e -> {
+                    Timer resetTimer = new Timer(3000, ev -> {
                         if (!isProcessing) {
                             statusLabel.setText("Ready for drag and drop");
                         }
@@ -418,10 +522,16 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         }
     }
     
-    private void showSuccess(String fileName) {
+    private void showSuccess(int successCount, int totalFiles) {
+        String message = successCount == 1
+            ? "1 file cleaned successfully!"
+            : successCount + " of " + totalFiles + " files cleaned successfully!";
+        message += "\n\nFiles have been saved to:\n" + outputFolder.getAbsolutePath();
+        message += "\n\nWould you like to open the output folder?";
+        
         int result = JOptionPane.showConfirmDialog(
             this,
-            "File cleaned successfully!\n\n" + fileName + " has been saved to your Desktop.\n\nWould you like to open your Desktop folder?",
+            message,
             "Success",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.INFORMATION_MESSAGE
@@ -429,8 +539,7 @@ public class CSVCharacterCleanerGUI extends JFrame implements DropTargetListener
         
         if (result == JOptionPane.YES_OPTION) {
             try {
-                String desktopPath = System.getProperty("user.home") + File.separator + "Desktop";
-                Desktop.getDesktop().open(new File(desktopPath));
+                Desktop.getDesktop().open(outputFolder);
             } catch (Exception ex) {
                 // Silently fail if can't open folder
             }
